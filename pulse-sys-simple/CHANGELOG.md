@@ -1,3 +1,7 @@
+# <unreleased>
+
+ * Specified edition in toml file
+
 # 1.5.0 (December 22nd, 2018)
 
  * Added the new `latest_pa_compatibility` and `pa_v12_compatibility` feature flags, and deprecated

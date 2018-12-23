@@ -1,3 +1,7 @@
+# <unreleased>
+
+ * Specified edition in toml file
+
 # 2.6.0 (March 10th, 2019)
 
  * Implemented use of `std::panic::catch_unwind` in callbacks

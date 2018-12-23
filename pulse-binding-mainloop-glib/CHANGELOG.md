@@ -1,3 +1,7 @@
+# <unreleased>
+
+ * Specified edition in toml file
+
 # 2.6.0 (March 10th, 2019)
 
  * Updated `libpulse-binding` version dependency (2.5 → 2.6)
