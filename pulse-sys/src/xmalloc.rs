@@ -15,7 +15,6 @@
 
 //! Memory allocation functions.
 
-use std;
 use std::os::raw::{c_char, c_void};
 
 /// Allocate `n` new structures of the specified type.

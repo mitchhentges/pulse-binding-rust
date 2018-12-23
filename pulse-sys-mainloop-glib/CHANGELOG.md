@@ -1,3 +1,7 @@
+# <unreleased>
+
+ * Updated `use` conventions to that of Rust 1.30/1.31
+
 # 1.5.0 (December 22nd, 2018)
 
  * Added the new `latest_pa_compatibility` and `pa_v12_compatibility` feature flags, and deprecated
