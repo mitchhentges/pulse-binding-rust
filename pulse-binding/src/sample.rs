@@ -50,7 +50,7 @@
 //!
 //! PulseAudio supports up to 32 individual channels. The order of the channels is up to the
 //! application, but they must be continuous. To map channels to speakers, see
-//! [`::channelmap`](../channelmap/index.html).
+//! [`channelmap`](../channelmap/index.html).
 //!
 //! # Calculations
 //!
@@ -69,11 +69,10 @@
 //! [`Spec::sample_size`]: struct.Spec.html#method.sample_size
 //! [`Spec::bytes_to_usec`]: struct.Spec.html#method.bytes_to_usec
 
-use std;
-use capi;
 use std::ffi::{CStr, CString};
 use std::borrow::Cow;
-use time::MicroSeconds;
+use std::mem;
+use crate::time::MicroSeconds;
 
 pub use capi::PA_CHANNELS_MAX as CHANNELS_MAX;
 pub use capi::PA_RATE_MAX as RATE_MAX;
@@ -116,13 +115,13 @@ pub enum Format {
 
 impl From<Format> for capi::pa_sample_format_t {
     fn from(f: Format) -> Self {
-        unsafe { std::mem::transmute(f) }
+        unsafe { mem::transmute(f) }
     }
 }
 
 impl From<capi::pa_sample_format_t> for Format {
     fn from(f: capi::pa_sample_format_t) -> Self {
-        unsafe { std::mem::transmute(f) }
+        unsafe { mem::transmute(f) }
     }
 }
 
@@ -210,45 +209,45 @@ impl Spec {
     /// The sample spec will have a defined state but [`is_valid`](#method.is_valid) will fail for
     /// it.
     pub fn init(&mut self) {
-        unsafe { capi::pa_sample_spec_init(std::mem::transmute(self)); }
+        unsafe { capi::pa_sample_spec_init(mem::transmute(self)); }
     }
 
     /// Returns `true` when the sample type specification is valid
     pub fn is_valid(&self) -> bool {
-        unsafe { capi::pa_sample_spec_valid(std::mem::transmute(self)) != 0 }
+        unsafe { capi::pa_sample_spec_valid(mem::transmute(self)) != 0 }
     }
 
     /// Returns `true` when the two sample type specifications match
     pub fn equal_to(&self, to: &Self) -> bool {
-        unsafe { capi::pa_sample_spec_equal(std::mem::transmute(self), std::mem::transmute(to)) != 0 }
+        unsafe { capi::pa_sample_spec_equal(mem::transmute(self), mem::transmute(to)) != 0 }
     }
 
     /// Returns the amount of bytes that constitute playback of one second of audio, with the
     /// specified sample type.
     pub fn bytes_per_second(&self) -> usize {
-        unsafe { capi::pa_bytes_per_second(std::mem::transmute(self)) }
+        unsafe { capi::pa_bytes_per_second(mem::transmute(self)) }
     }
 
     /// Returns the size of a frame
     pub fn frame_size(&self) -> usize {
-        unsafe { capi::pa_frame_size(std::mem::transmute(self)) }
+        unsafe { capi::pa_frame_size(mem::transmute(self)) }
     }
 
     /// Returns the size of a sample
     pub fn sample_size(&self) -> usize {
-        unsafe { capi::pa_sample_size(std::mem::transmute(self)) }
+        unsafe { capi::pa_sample_size(mem::transmute(self)) }
     }
 
     /// Calculate the time it would take to play a buffer of the specified size.
     /// The return value will always be rounded down for non-integral return values.
     pub fn bytes_to_usec(&self, length: u64) -> MicroSeconds {
-        MicroSeconds(unsafe { capi::pa_bytes_to_usec(length, std::mem::transmute(self)) })
+        MicroSeconds(unsafe { capi::pa_bytes_to_usec(length, mem::transmute(self)) })
     }
 
     /// Calculates the size of a buffer required, for playback duration of the time specified.
     /// The return value will always be rounded down for non-integral return values.
     pub fn usec_to_bytes(&self, t: MicroSeconds) -> usize {
-        unsafe { capi::pa_usec_to_bytes(t.0, std::mem::transmute(self)) }
+        unsafe { capi::pa_usec_to_bytes(t.0, mem::transmute(self)) }
     }
 
     /// Pretty print a sample type specification to a string
@@ -256,7 +255,7 @@ impl Spec {
         const PRINT_MAX: usize = capi::PA_SAMPLE_SPEC_SNPRINT_MAX;
         let mut tmp = Vec::with_capacity(PRINT_MAX);
         unsafe {
-            capi::pa_sample_spec_snprint(tmp.as_mut_ptr(), PRINT_MAX, std::mem::transmute(self));
+            capi::pa_sample_spec_snprint(tmp.as_mut_ptr(), PRINT_MAX, mem::transmute(self));
             CStr::from_ptr(tmp.as_mut_ptr()).to_string_lossy().into_owned()
         }
     }

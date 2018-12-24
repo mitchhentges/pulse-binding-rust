@@ -43,10 +43,10 @@
 //! [`Map::init_auto`]: struct.Map.html#method.init_auto
 //! [`Map::init_extend`]: struct.Map.html#method.init_extend
 
-use std;
-use capi;
 use std::ffi::{CStr, CString};
 use std::borrow::Cow;
+use std::mem;
+use crate::sample;
 
 pub use capi::pa_channel_map_def_t as MapDef;
 
@@ -158,13 +158,13 @@ impl Default for Position {
 
 impl From<Position> for capi::pa_channel_position_t {
     fn from(p: Position) -> Self {
-        unsafe { std::mem::transmute(p) }
+        unsafe { mem::transmute(p) }
     }
 }
 
 impl From<capi::pa_channel_position_t> for Position {
     fn from(p: capi::pa_channel_position_t) -> Self {
-        unsafe { std::mem::transmute(p) }
+        unsafe { mem::transmute(p) }
     }
 }
 
@@ -176,14 +176,14 @@ pub struct Map {
     /// Number of channels mapped
     pub channels: u8,
     /// Channel labels
-    pub map: [Position; ::sample::CHANNELS_MAX],
+    pub map: [Position; sample::CHANNELS_MAX],
 }
 
 impl Default for Map {
     fn default() -> Self {
         Self {
             channels: 0,
-            map: [Position::Invalid; ::sample::CHANNELS_MAX],
+            map: [Position::Invalid; sample::CHANNELS_MAX],
         }
     }
 }
@@ -243,7 +243,7 @@ impl Map {
         let c_str = CString::new(s.clone()).unwrap();
         let mut map: Self = Self::default();
         unsafe {
-            if capi::pa_channel_map_parse(std::mem::transmute(&mut map), c_str.as_ptr()).is_null() {
+            if capi::pa_channel_map_parse(mem::transmute(&mut map), c_str.as_ptr()).is_null() {
                 return Err(());
             }
         }
@@ -253,19 +253,19 @@ impl Map {
     /// Initialize the specified channel map and return a pointer to it. The map will have a defined
     /// state but [`is_valid`](#method.is_valid) will fail for it.
     pub fn init(&mut self) -> &mut Self {
-        unsafe { capi::pa_channel_map_init(std::mem::transmute(&self)) };
+        unsafe { capi::pa_channel_map_init(mem::transmute(&self)) };
         self
     }
 
     /// Initialize the specified channel map for monaural audio and return a pointer to it.
     pub fn init_mono(&mut self) -> &mut Self {
-        unsafe { capi::pa_channel_map_init_mono(std::mem::transmute(&self)) };
+        unsafe { capi::pa_channel_map_init_mono(mem::transmute(&self)) };
         self
     }
 
     /// Initialize the specified channel map for stereophonic audio and return a pointer to it.
     pub fn init_stereo(&mut self) -> &mut Self {
-        unsafe { capi::pa_channel_map_init_stereo(std::mem::transmute(&self)) };
+        unsafe { capi::pa_channel_map_init_stereo(mem::transmute(&self)) };
         self
     }
 
@@ -275,9 +275,9 @@ impl Map {
     /// This call will fail (return `None`) if there is no default channel map known for this
     /// specific number of channels and mapping.
     pub fn init_auto(&mut self, channels: u32, def: MapDef) -> Option<&mut Self> {
-        debug_assert!(channels as usize <= ::sample::CHANNELS_MAX);
+        debug_assert!(channels as usize <= sample::CHANNELS_MAX);
         unsafe {
-            if capi::pa_channel_map_init_auto(std::mem::transmute(&self), channels, def).is_null() {
+            if capi::pa_channel_map_init_auto(mem::transmute(&self), channels, def).is_null() {
                 return None;
             }
         }
@@ -288,8 +288,8 @@ impl Map {
     /// known with the specified parameters it will synthesize a mapping based on a known mapping
     /// with fewer channels and fill up the rest with AUX0...AUX31 channels.
     pub fn init_extend(&mut self, channels: u32, def: MapDef) -> &mut Self {
-        debug_assert!(channels as usize <= ::sample::CHANNELS_MAX);
-        unsafe { capi::pa_channel_map_init_extend(std::mem::transmute(&self), channels, def) };
+        debug_assert!(channels as usize <= sample::CHANNELS_MAX);
+        unsafe { capi::pa_channel_map_init_extend(mem::transmute(&self), channels, def) };
         self
     }
 
@@ -298,58 +298,58 @@ impl Map {
         const PRINT_MAX: usize = capi::PA_CHANNEL_MAP_SNPRINT_MAX;
         let mut tmp = Vec::with_capacity(PRINT_MAX);
         unsafe {
-            capi::pa_channel_map_snprint(tmp.as_mut_ptr(), PRINT_MAX, std::mem::transmute(self));
+            capi::pa_channel_map_snprint(tmp.as_mut_ptr(), PRINT_MAX, mem::transmute(self));
             CStr::from_ptr(tmp.as_mut_ptr()).to_string_lossy().into_owned()
         }
     }
 
     /// Compare whether or not two maps are equal.
     pub fn is_equal_to(&self, to: &Self) -> bool {
-        unsafe { capi::pa_channel_map_equal(std::mem::transmute(self),
-            std::mem::transmute(to)) == 1 }
+        unsafe { capi::pa_channel_map_equal(mem::transmute(self),
+            mem::transmute(to)) == 1 }
     }
 
     /// Check whether or not the map is considered valid.
     pub fn is_valid(&self) -> bool {
-        unsafe { capi::pa_channel_map_valid(std::mem::transmute(self)) != 0 }
+        unsafe { capi::pa_channel_map_valid(mem::transmute(self)) != 0 }
     }
 
     /// Checks whether or not the specified map is compatible with the specified sample spec.
-    pub fn is_compatible_with_sample_spec(&self, ss: &::sample::Spec) -> bool {
-        unsafe { capi::pa_channel_map_compatible(std::mem::transmute(self),
-            std::mem::transmute(ss)) != 0 }
+    pub fn is_compatible_with_sample_spec(&self, ss: &sample::Spec) -> bool {
+        unsafe { capi::pa_channel_map_compatible(mem::transmute(self),
+            mem::transmute(ss)) != 0 }
     }
 
     /// Checks whether every channel defined in `of` is also defined in self.
     pub fn is_superset_of(&self, of: &Self) -> bool {
-        unsafe { capi::pa_channel_map_superset(std::mem::transmute(self),
-            std::mem::transmute(of)) != 0 }
+        unsafe { capi::pa_channel_map_superset(mem::transmute(self),
+            mem::transmute(of)) != 0 }
     }
 
     /// Checks whether or not it makes sense to apply a volume “balance” with this mapping, i.e. if
     /// there are left/right channels available.
     pub fn can_balance(&self) -> bool {
-        unsafe { capi::pa_channel_map_can_balance(std::mem::transmute(self)) != 0 }
+        unsafe { capi::pa_channel_map_can_balance(mem::transmute(self)) != 0 }
     }
 
     /// Checks whether or not it makes sense to apply a volume “fade” (i.e. “balance” between front
     /// and rear) with this mapping, i.e. if there are front/rear channels available.
     pub fn can_fade(&self) -> bool {
-        unsafe { capi::pa_channel_map_can_fade(std::mem::transmute(self)) != 0 }
+        unsafe { capi::pa_channel_map_can_fade(mem::transmute(self)) != 0 }
     }
 
     /// Checks whether or not it makes sense to apply a volume “LFE balance” (i.e. “balance” between
     /// LFE and non-LFE channels) with this mapping, i.e. if there are LFE and non-LFE channels
     /// available.
     pub fn can_lfe_balance(&self) -> bool {
-        unsafe { capi::pa_channel_map_can_lfe_balance(std::mem::transmute(self)) != 0 }
+        unsafe { capi::pa_channel_map_can_lfe_balance(mem::transmute(self)) != 0 }
     }
 
     /// Tries to find a well-known channel mapping name for this channel mapping, i.e. “stereo”,
     /// “surround-71” and so on. This name can be parsed with
     /// [`new_from_string`](#method.new_from_string).
     pub fn to_name(&self) -> Option<Cow<'static, str>> {
-        let ptr = unsafe { capi::pa_channel_map_to_name(std::mem::transmute(self)) };
+        let ptr = unsafe { capi::pa_channel_map_to_name(mem::transmute(self)) };
         if ptr.is_null() {
             return None;
         }
@@ -359,7 +359,7 @@ impl Map {
     /// Similar to [`to_name`](#method.to_name), but returning prettier, human readable text labels,
     /// i.e. “Stereo”, “Surround 7.1” and so on.
     pub fn to_pretty_name(&self) -> Option<String> {
-        let ptr = unsafe { capi::pa_channel_map_to_pretty_name(std::mem::transmute(self)) };
+        let ptr = unsafe { capi::pa_channel_map_to_pretty_name(mem::transmute(self)) };
         if ptr.is_null() {
             return None;
         }
@@ -368,11 +368,11 @@ impl Map {
 
     /// Checks whether or not the specified channel position is available at least once in the map.
     pub fn has_position(&self, p: Position) -> bool {
-        unsafe { capi::pa_channel_map_has_position(std::mem::transmute(self), p.into()) != 0 }
+        unsafe { capi::pa_channel_map_has_position(mem::transmute(self), p.into()) != 0 }
     }
 
     /// Generates a bit mask from a map.
     pub fn get_mask(&self) -> PositionMask {
-        unsafe { capi::pa_channel_map_mask(std::mem::transmute(self)) }
+        unsafe { capi::pa_channel_map_mask(mem::transmute(self)) }
     }
 }

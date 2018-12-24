@@ -15,7 +15,6 @@
 
 //! Assorted utility functions.
 
-use capi;
 use std::ffi::CStr;
 
 macro_rules! fn_string_with_buffer {
@@ -51,4 +50,3 @@ fn_string_with_buffer!(get_home_dir, pa_get_home_dir);
 /// Return the binary file name of the current process. Returns `None` on failure. This is not
 /// supported on all architectures (in which case `NULL` is returned).
 fn_string_with_buffer!(get_binary_name, pa_get_binary_name);
-

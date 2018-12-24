@@ -57,10 +57,11 @@
 //! #
 //! use psimple::Simple;
 //! use pulse::stream::Direction;
+//! use pulse::sample;
 //!
 //! # fn main() {
-//! let spec = pulse::sample::Spec {
-//!     format: pulse::sample::SAMPLE_S16NE,
+//! let spec = sample::Spec {
+//!     format: sample::SAMPLE_S16NE,
 //!     channels: 2,
 //!     rate: 44100,
 //! };
@@ -115,9 +116,10 @@ extern crate libpulse_sys as pcapi;
 extern crate libpulse_simple_sys as capi;
 
 use std::os::raw::{c_char, c_void};
-use std::ffi::CString;
-use std::ptr::null;
-use pulse::error::PAErr;
+use std::{ffi::CString, ptr::null};
+use std::mem;
+use pulse::{error::PAErr, time::MicroSeconds};
+use pulse::{stream, sample, channelmap, def};
 
 use capi::pa_simple as SimpleInternal;
 
@@ -143,9 +145,9 @@ impl Simple {
     /// * `ss`: The sample type to use.
     /// * `map`: The channel map to use, or `None` for default.
     /// * `attr`: Buffering attributes, or `None` for default.
-    pub fn new(server: Option<&str>, name: &str, dir: pulse::stream::Direction, dev: Option<&str>,
-        stream_name: &str, ss: &pulse::sample::Spec, map: Option<&pulse::channelmap::Map>,
-        attr: Option<&pulse::def::BufferAttr>) -> Result<Self, PAErr>
+    pub fn new(server: Option<&str>, name: &str, dir: stream::Direction, dev: Option<&str>,
+        stream_name: &str, ss: &sample::Spec, map: Option<&channelmap::Map>,
+        attr: Option<&def::BufferAttr>) -> Result<Self, PAErr>
     {
         // Warning: New CStrings will be immediately freed if not bound to a variable, leading to
         // as_ptr() giving dangling pointers!
@@ -159,11 +161,11 @@ impl Simple {
         };
 
         let p_map: *const pcapi::pa_channel_map = match map {
-            Some(map) => unsafe { std::mem::transmute(map) },
+            Some(map) => unsafe { mem::transmute(map) },
             None => null::<pcapi::pa_channel_map>(),
         };
         let p_attr: *const pcapi::pa_buffer_attr = match attr {
-            Some(attr) => unsafe { std::mem::transmute(attr) },
+            Some(attr) => unsafe { mem::transmute(attr) },
             None => null::<pcapi::pa_buffer_attr>(),
         };
         let p_server: *const c_char = match server {
@@ -185,7 +187,7 @@ impl Simple {
                 dir,
                 p_dev,
                 c_stream_name.as_ptr(),
-                std::mem::transmute(ss),
+                mem::transmute(ss),
                 p_map,
                 p_attr,
                 &mut error
@@ -238,13 +240,13 @@ impl Simple {
     }
 
     /// Return the playback or record latency.
-    pub fn get_latency(&self) -> Option<pulse::time::MicroSeconds> {
+    pub fn get_latency(&self) -> Option<MicroSeconds> {
         let mut error: i32 = 0;
         let ret = unsafe { capi::pa_simple_get_latency(self.ptr, &mut error) };
         if error != 0 {
             return None;
         }
-        Some(pulse::time::MicroSeconds(ret))
+        Some(MicroSeconds(ret))
     }
 
     /// Flush the playback or record buffer. This discards any audio in the buffer.

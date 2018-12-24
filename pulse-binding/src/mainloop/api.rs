@@ -15,15 +15,17 @@
 
 //! Main loop abstraction layer API.
 
-use std;
-use capi;
 use std::os::raw::c_void;
 use std::rc::Rc;
+use std::mem;
 use libc::timeval;
+use crate::def;
+use super::events;
 use super::events::io::{IoEvent, IoEventRef, IoEventInternal, IoEventFlagSet};
 use super::events::timer::{TimeEvent, TimeEventRef, TimeEventInternal};
 use super::events::deferred::{DeferEvent, DeferEventRef, DeferEventInternal};
-use time::{UnixTs, MonotonicTs, Timeval, USEC_INVALID};
+use crate::time::{UnixTs, MonotonicTs, Timeval, USEC_INVALID};
+use crate::callbacks::{get_su_capi_params, get_su_callback};
 
 pub(crate) use capi::pa_mainloop_api as ApiInternal;
 
@@ -133,8 +135,8 @@ pub trait Mainloop {
             callback(ref_obj, fd, flags);
         });
 
-        let to_save = super::events::io::EventCb::new(Some(wrapper_cb));
-        let (cb_fn, cb_data) = to_save.get_capi_params(super::events::io::event_cb_proxy);
+        let to_save = events::io::EventCb::new(Some(wrapper_cb));
+        let (cb_fn, cb_data) = to_save.get_capi_params(events::io::event_cb_proxy);
 
         let inner = self.inner();
         let api = inner.get_api();
@@ -175,8 +177,8 @@ pub trait Mainloop {
             callback(ref_obj);
         });
 
-        let to_save = super::events::timer::EventCb::new(Some(wrapper_cb));
-        let (cb_fn, cb_data) = to_save.get_capi_params(super::events::timer::event_cb_proxy);
+        let to_save = events::timer::EventCb::new(Some(wrapper_cb));
+        let (cb_fn, cb_data) = to_save.get_capi_params(events::timer::event_cb_proxy);
 
         let inner = self.inner();
         let api = inner.get_api();
@@ -223,8 +225,8 @@ pub trait Mainloop {
             callback(ref_obj);
         });
 
-        let to_save = super::events::timer::EventCb::new(Some(wrapper_cb));
-        let (cb_fn, cb_data) = to_save.get_capi_params(super::events::timer::event_cb_proxy);
+        let to_save = events::timer::EventCb::new(Some(wrapper_cb));
+        let (cb_fn, cb_data) = to_save.get_capi_params(events::timer::event_cb_proxy);
 
         let inner = self.inner();
 
@@ -260,8 +262,8 @@ pub trait Mainloop {
             callback(ref_obj);
         });
 
-        let to_save = super::events::deferred::EventCb::new(Some(wrapper_cb));
-        let (cb_fn, cb_data) = to_save.get_capi_params(super::events::deferred::event_cb_proxy);
+        let to_save = events::deferred::EventCb::new(Some(wrapper_cb));
+        let (cb_fn, cb_data) = to_save.get_capi_params(events::deferred::event_cb_proxy);
 
         let inner = self.inner();
         let api = inner.get_api();
@@ -276,19 +278,19 @@ pub trait Mainloop {
     /// Run the specified callback once from the main loop using an anonymous defer event.
     /// If the mainloop runs in a different thread, you need to follow the mainloop implementation’s
     /// rules regarding how to safely create defer events. In particular, if you’re using
-    /// [`::mainloop::threaded`](../threaded/index.html), you must lock the mainloop before calling
+    /// [`mainloop::threaded`](../threaded/index.html), you must lock the mainloop before calling
     /// this function.
     fn once_event(&mut self, callback: Box<dyn FnMut() + 'static>) {
         let (cb_fn, cb_data): (Option<extern "C" fn(_, _)>, _) =
-            ::callbacks::get_su_capi_params::<_, _>(Some(callback), once_cb_proxy);
+            get_su_capi_params::<_, _>(Some(callback), once_cb_proxy);
 
         let inner = self.inner();
         let api = inner.get_api();
-        unsafe { capi::pa_mainloop_api_once(std::mem::transmute(api), cb_fn, cb_data) };
+        unsafe { capi::pa_mainloop_api_once(mem::transmute(api), cb_fn, cb_data) };
     }
 
     /// Call quit
-    fn quit(&mut self, retval: ::def::Retval) {
+    fn quit(&mut self, retval: def::Retval) {
         let inner = self.inner();
         let api = inner.get_api();
         let fn_ptr = api.quit.unwrap();
@@ -359,18 +361,18 @@ pub struct MainloopApi {
         cb: Option<DeferEventDestroyCb>)>,
 
     /// Exit the main loop and return the specified retval
-    pub quit: Option<extern "C" fn(a: *const MainloopApi, retval: ::def::RetvalActual)>,
+    pub quit: Option<extern "C" fn(a: *const MainloopApi, retval: def::RetvalActual)>,
 }
 
 impl<'a> From<*const ApiInternal> for &'a MainloopApi {
     fn from(a: *const ApiInternal) -> Self {
-        unsafe { std::mem::transmute(a) }
+        unsafe { mem::transmute(a) }
     }
 }
 
 impl<'a> From<&'a MainloopApi> for *const ApiInternal {
     fn from(a: &'a MainloopApi) -> Self {
-        unsafe { std::mem::transmute(a) }
+        unsafe { mem::transmute(a) }
     }
 }
 
@@ -380,7 +382,7 @@ extern "C"
 fn once_cb_proxy(_: *const ApiInternal, userdata: *mut c_void) {
     let _ = std::panic::catch_unwind(|| {
         // Note, destroys closure callback after use - restoring outer box means it gets dropped
-        let mut callback = ::callbacks::get_su_callback::<dyn FnMut()>(userdata);
+        let mut callback = get_su_callback::<dyn FnMut()>(userdata);
         (callback)();
     });
 }

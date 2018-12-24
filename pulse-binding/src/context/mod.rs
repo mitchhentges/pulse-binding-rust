@@ -29,13 +29,13 @@
 //!
 //! All operations on the context are performed asynchronously. I.e. the client will not wait for
 //! the server to complete the request. To keep track of all these in-flight operations, the
-//! application is given an [`::operation::Operation`] object for each asynchronous operation.
+//! application is given an [`operation::Operation`] object for each asynchronous operation.
 //!
 //! There are only two actions (besides reference counting) that can be performed on an
-//! [`::operation::Operation`]: querying its state with [`::operation::Operation::get_state`] and
-//! aborting it with [`::operation::Operation::cancel`].
+//! [`operation::Operation`]: querying its state with [`operation::Operation::get_state`] and
+//! aborting it with [`operation::Operation::cancel`].
 //!
-//! An [`::operation::Operation`] object is reference counted, so an application must make sure to
+//! An [`operation::Operation`] object is reference counted, so an application must make sure to
 //! unreference it, even if it has no intention of using it. This however is taken care of
 //! automatically in this Rust binding via the implementation of the `Drop` trait on the object.
 //!
@@ -43,7 +43,7 @@
 //!
 //! A context must be connected to a server before any operation can be issued. Calling
 //! [`Context::connect`] will initiate the connection procedure. Unlike most asynchronous
-//! operations, connecting does not result in an [`::operation::Operation`] object. Instead, the
+//! operations, connecting does not result in an [`operation::Operation`] object. Instead, the
 //! application should register a callback using [`Context::set_state_callback`].
 //!
 //! # Disconnecting
@@ -59,21 +59,21 @@
 //!
 //! The sound server’s functionality can be divided into a number of subsections:
 //!
-//! * [`::stream`]
-//! * [`::context::scache`]
-//! * [`::context::introspect`]
-//! * [`::context::subscribe`]
+//! * [`stream`]
+//! * [`context::scache`]
+//! * [`context::introspect`]
+//! * [`context::subscribe`]
 //!
 //! [`Context::connect`]: struct.Context.html#method.connect
 //! [`Context::disconnect`]: struct.Context.html#method.disconnect
 //! [`Context::set_state_callback`]: struct.Context.html#method.set_state_callback
-//! [`::context::introspect`]: ../context/introspect/index.html 
-//! [`::context::scache`]: ../context/scache/index.html
-//! [`::context::subscribe`]: ../context/subscribe/index.html
-//! [`::operation::Operation::cancel`]: ../operation/struct.Operation.html#method.cancel
-//! [`::operation::Operation::get_state`]: ../operation/struct.Operation.html#method.get_state
-//! [`::operation::Operation`]: ../operation/struct.Operation.html
-//! [`::stream`]: ../stream/index.html
+//! [`context::introspect`]: ../context/introspect/index.html
+//! [`context::scache`]: ../context/scache/index.html
+//! [`context::subscribe`]: ../context/subscribe/index.html
+//! [`operation::Operation::cancel`]: ../operation/struct.Operation.html#method.cancel
+//! [`operation::Operation::get_state`]: ../operation/struct.Operation.html#method.get_state
+//! [`operation::Operation`]: ../operation/struct.Operation.html
+//! [`stream`]: ../stream/index.html
 
 pub mod ext_device_manager;
 pub mod ext_device_restore;
@@ -82,20 +82,21 @@ pub mod introspect;
 pub mod scache;
 pub mod subscribe;
 
-use std;
-use capi;
 use std::os::raw::{c_char, c_void};
 use std::ffi::{CStr, CString};
 use std::ptr::{null, null_mut};
 use std::rc::Rc;
-use mainloop::api::MainloopInnerType;
-use mainloop::events::timer::{TimeEvent, TimeEventRef};
-use operation::Operation;
-use error::PAErr;
-use time::MonotonicTs;
-use proplist::Proplist;
-use callbacks::box_closure_get_capi_ptr;
-use capi::pa_context as ContextInternal;
+use std::mem;
+use crate::{def, sample};
+use crate::mainloop::api::{Mainloop, MainloopInnerType};
+use crate::mainloop::events;
+use crate::mainloop::events::timer::{TimeEvent, TimeEventRef};
+use crate::operation::Operation;
+use crate::error::PAErr;
+use crate::time::MonotonicTs;
+use crate::proplist::{self, Proplist, ProplistInternal};
+use crate::callbacks::{box_closure_get_capi_ptr, get_su_callback, MultiUseCallback};
+use crate::capi::pa_context as ContextInternal;
 
 /// An opaque connection context to a daemon
 ///
@@ -121,15 +122,12 @@ struct CallbackPointers {
     event: EventCb,
 }
 
-type NotifyCb = ::callbacks::MultiUseCallback<dyn FnMut(),
-    extern "C" fn(*mut ContextInternal, *mut c_void)>;
+type NotifyCb = MultiUseCallback<dyn FnMut(), extern "C" fn(*mut ContextInternal, *mut c_void)>;
 
-type EventCb = ::callbacks::MultiUseCallback<dyn FnMut(String, Proplist),
-    extern "C" fn(*mut ContextInternal, name: *const c_char, pl: *mut ::proplist::ProplistInternal,
-        *mut c_void)>;
+type EventCb = MultiUseCallback<dyn FnMut(String, Proplist),
+    extern "C" fn(*mut ContextInternal, name: *const c_char, pl: *mut ProplistInternal, *mut c_void)>;
 
-type ExtSubscribeCb = ::callbacks::MultiUseCallback<dyn FnMut(),
-    extern "C" fn(*mut ContextInternal, *mut c_void)>;
+type ExtSubscribeCb = MultiUseCallback<dyn FnMut(), extern "C" fn(*mut ContextInternal, *mut c_void)>;
 
 /// The state of a connection context
 #[repr(C)]
@@ -153,13 +151,13 @@ pub enum State {
 
 impl From<State> for capi::pa_context_state_t {
     fn from(s: State) -> Self {
-        unsafe { std::mem::transmute(s) }
+        unsafe { mem::transmute(s) }
     }
 }
 
 impl From<capi::pa_context_state_t> for State {
     fn from(s: capi::pa_context_state_t) -> Self {
-        unsafe { std::mem::transmute(s) }
+        unsafe { mem::transmute(s) }
     }
 }
 
@@ -195,11 +193,11 @@ impl Context {
     ///
     /// It is recommended to use [`new_with_proplist`](#method.new_with_proplist) instead and
     /// specify some initial properties.
-    pub fn new(mainloop: &impl ::mainloop::api::Mainloop, name: &str) -> Option<Self> {
+    pub fn new(mainloop: &impl Mainloop, name: &str) -> Option<Self> {
         // Warning: New CStrings will be immediately freed if not bound to a variable, leading to
         // as_ptr() giving dangling pointers!
         let c_name = CString::new(name.clone()).unwrap();
-        let ptr = unsafe { capi::pa_context_new(std::mem::transmute(mainloop.inner().get_api()),
+        let ptr = unsafe { capi::pa_context_new(mem::transmute(mainloop.inner().get_api()),
             c_name.as_ptr()) };
         if ptr.is_null() {
             return None;
@@ -209,14 +207,14 @@ impl Context {
 
     /// Instantiate a new connection context with an abstract mainloop API and an application name,
     /// and specify the initial client property list.
-    pub fn new_with_proplist(mainloop: &impl ::mainloop::api::Mainloop, name: &str,
-        proplist: &Proplist) -> Option<Self>
+    pub fn new_with_proplist(mainloop: &impl Mainloop, name: &str, proplist: &Proplist)
+        -> Option<Self>
     {
         // Warning: New CStrings will be immediately freed if not bound to a variable, leading to
         // as_ptr() giving dangling pointers!
         let c_name = CString::new(name.clone()).unwrap();
         let ptr = unsafe { capi::pa_context_new_with_proplist(
-            std::mem::transmute(mainloop.inner().get_api()), c_name.as_ptr(), proplist.0.ptr) };
+            mem::transmute(mainloop.inner().get_api()), c_name.as_ptr(), proplist.0.ptr) };
         if ptr.is_null() {
             return None;
         }
@@ -276,7 +274,7 @@ impl Context {
     /// [`flags::NOAUTOSPAWN`](flags/constant.NOAUTOSPAWN.html) set and no specific server is
     /// specified or accessible, a new daemon is spawned. If `api` is not `None`, the functions
     /// specified in the structure are used when forking a new child process.
-    pub fn connect(&mut self, server: Option<&str>, flags: FlagSet, api: Option<&::def::SpawnApi>)
+    pub fn connect(&mut self, server: Option<&str>, flags: FlagSet, api: Option<&def::SpawnApi>)
         -> Result<(), PAErr>
     {
         // Warning: New CStrings will be immediately freed if not bound to a variable, leading to
@@ -287,7 +285,7 @@ impl Context {
         };
 
         let p_api: *const capi::pa_spawn_api = match api {
-            Some(api) => unsafe { std::mem::transmute(api) },
+            Some(api) => unsafe { mem::transmute(api) },
             None => null::<capi::pa_spawn_api>(),
         };
         let p_server: *const c_char = match server {
@@ -432,7 +430,7 @@ impl Context {
     /// Returns `None` on error.
     pub fn get_server_protocol_version(&self) -> Option<u32> {
         match unsafe { capi::pa_context_get_server_protocol_version(self.ptr) } {
-            ::def::INVALID_INDEX => None,
+            def::INVALID_INDEX => None,
             r => Some(r),
         }
     }
@@ -445,7 +443,7 @@ impl Context {
     /// right device.
     ///
     /// Panics if the underlying C function returns a null pointer.
-    pub fn proplist_update<F>(&mut self, mode: ::proplist::UpdateMode, pl: &Proplist, callback: F)
+    pub fn proplist_update<F>(&mut self, mode: proplist::UpdateMode, pl: &Proplist, callback: F)
         -> Operation<dyn FnMut(bool)>
         where F: FnMut(bool) + 'static
     {
@@ -487,14 +485,14 @@ impl Context {
     /// Return the client index this context is identified in the server with.
     ///
     /// This is useful for usage with the introspection functions, such as
-    /// [`::introspect::Introspector::get_client_info`].
+    /// [`introspect::Introspector::get_client_info`].
     ///
     /// Returns `None` on error.
     ///
-    /// [`::introspect::Introspector::get_client_info`]: introspect/struct.Introspector.html#method.get_client_info
+    /// [`introspect::Introspector::get_client_info`]: introspect/struct.Introspector.html#method.get_client_info
     pub fn get_index(&self) -> Option<u32> {
         match unsafe { capi::pa_context_get_index(self.ptr) } {
-            ::def::INVALID_INDEX => None,
+            def::INVALID_INDEX => None,
             r => Some(r),
         }
     }
@@ -507,7 +505,7 @@ impl Context {
     /// it. The association is done to ensure the event does not outlive the mainloop.
     ///
     /// If pointer returned by underlying C function is `NULL`, `None` will be returned, otherwise a
-    /// [`::mainloop::events::timer::TimeEvent`] object will be returned.
+    /// [`mainloop::events::timer::TimeEvent`] object will be returned.
     ///
     /// Example event set to fire in five seconds time:
     ///
@@ -522,10 +520,10 @@ impl Context {
     /// event(s) to fire, as its `Drop` implementation destroys the event source. I.e. if you create
     /// a new event, but then immediately drop the object returned here, no event will fire!
     ///
-    /// [`::mainloop::events::timer::TimeEvent`]: ../mainloop/events/timer/struct.TimeEvent.html
-    pub fn rttime_new<T, F>(&self, mainloop: &::mainloop::api::Mainloop<MI=T::MI>,
-        time: MonotonicTs, mut callback: F) -> Option<TimeEvent<T::MI>>
-        where T: ::mainloop::api::Mainloop + 'static,
+    /// [`mainloop::events::timer::TimeEvent`]: ../mainloop/events/timer/struct.TimeEvent.html
+    pub fn rttime_new<T, F>(&self, mainloop: &Mainloop<MI=T::MI>, time: MonotonicTs,
+        mut callback: F) -> Option<TimeEvent<T::MI>>
+        where T: Mainloop + 'static,
               F: FnMut(TimeEventRef<T::MI>) + 'static
     {
         let inner_for_wrapper = mainloop.inner();
@@ -534,11 +532,11 @@ impl Context {
             callback(ref_obj);
         });
 
-        let to_save = ::mainloop::events::timer::EventCb::new(Some(wrapper_cb));
-        let (cb_fn, cb_data) = to_save.get_capi_params(::mainloop::events::timer::event_cb_proxy);
+        let to_save = events::timer::EventCb::new(Some(wrapper_cb));
+        let (cb_fn, cb_data) = to_save.get_capi_params(events::timer::event_cb_proxy);
 
-        let ptr = unsafe { capi::pa_context_rttime_new(self.ptr, (time.0).0,
-            std::mem::transmute(cb_fn), cb_data) };
+        let ptr = unsafe { capi::pa_context_rttime_new(self.ptr, (time.0).0, mem::transmute(cb_fn),
+            cb_data) };
         if ptr.is_null() {
             return None;
         }
@@ -560,10 +558,10 @@ impl Context {
     /// let ss = stream.get_sample_spec().unwrap();
     /// let size = stream.get_context().get_tile_size(ss).unwrap();
     /// ```
-    pub fn get_tile_size(&self, ss: &::sample::Spec) -> Option<usize> {
+    pub fn get_tile_size(&self, ss: &sample::Spec) -> Option<usize> {
         // Note: C function doc comments mention possibility of passing in a NULL pointer for ss.
         // We do not allow this, since 
-        match unsafe { capi::pa_context_get_tile_size(self.ptr, std::mem::transmute(ss)) } {
+        match unsafe { capi::pa_context_get_tile_size(self.ptr, mem::transmute(ss)) } {
             std::usize::MAX => None,
             r => Some(r),
         }
@@ -635,8 +633,8 @@ fn notify_cb_proxy_multi(_: *mut ContextInternal, userdata: *mut c_void) {
 /// Warning: This is for multi-use cases! It does **not** destroy the actual closure callback, which
 /// must be accomplished separately to avoid a memory leak.
 extern "C"
-fn event_cb_proxy(_: *mut ContextInternal, name: *const c_char,
-    proplist: *mut ::proplist::ProplistInternal, userdata: *mut c_void)
+fn event_cb_proxy(_: *mut ContextInternal, name: *const c_char, proplist: *mut ProplistInternal,
+    userdata: *mut c_void)
 {
     let _ = std::panic::catch_unwind(|| {
         assert!(!name.is_null());
@@ -657,7 +655,7 @@ extern "C"
 fn ext_test_cb_proxy(_: *mut ContextInternal, version: u32, userdata: *mut c_void) {
     let _ = std::panic::catch_unwind(|| {
         // Note, destroys closure callback after use - restoring outer box means it gets dropped
-        let mut callback = ::callbacks::get_su_callback::<dyn FnMut(u32)>(userdata);
+        let mut callback = get_su_callback::<dyn FnMut(u32)>(userdata);
         (callback)(version);
     });
 }

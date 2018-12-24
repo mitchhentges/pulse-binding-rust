@@ -1,5 +1,6 @@
 # <unreleased>
 
+ * Updated `use` conventions to that of Rust 1.30/1.31
  * Specified edition in toml file
 
 # 2.6.0 (March 10th, 2019)
