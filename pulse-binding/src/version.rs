@@ -69,9 +69,6 @@ mod actual {
     pub const TARGET_VERSION: (u8, u8) = (11, 0);
 }
 
-#[deprecated(since = "2.3.0", note="use `TARGET_VERSION_STRING` instead")]
-pub const BINDING_TARGET_VERSION: &str = TARGET_VERSION_STRING;
-
 /// The current API version. Please note that this is only ever increased on incompatible API
 /// changes!
 pub const API_VERSION: u8 = 12;
@@ -79,25 +76,10 @@ pub const API_VERSION: u8 = 12;
 /// The current protocol version.
 pub const PROTOCOL_VERSION: u16 = 32;
 
-#[deprecated(since = "2.3.0", note="use `TARGET_VERSION` instead")]
-pub const MAJOR: u8 = TARGET_VERSION.0;
-#[deprecated(since = "2.3.0", note="use `TARGET_VERSION` instead")]
-pub const MINOR: u8 = TARGET_VERSION.1;
-#[deprecated(since = "2.3.0", note="not useful, always zero")]
-pub const MICRO: u8 = 0;
-
 /// Returns indication of PA version compatibility support, depending upon feature flags used
 #[inline(always)]
 pub fn get_compatibility() -> Compatibility {
     actual::COMPATIBILITY
-}
-
-/// Returns `BINDING_TARGET_VERSION`
-#[deprecated(since = "2.3.0", note="not useful, confusing name, use `TARGET_VERSION_STRING` directly or `get_compatibility()` instead")]
-#[inline(always)]
-pub fn get_headers_version() -> &'static str {
-    #[allow(deprecated)]
-    BINDING_TARGET_VERSION
 }
 
 /// Returns the version of the library actually in use at runtime.
